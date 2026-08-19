@@ -1,0 +1,264 @@
+================================================================================
+  Python 文件说明文档
+================================================================================
+
+本项目包含 8 个 Python 文件，用于餐厅评论数据的分析、评分预测、
+智能回复生成及可视化展示。
+
+================================================================================
+  1. data_description.py — 数据集基础统计
+================================================================================
+
+【作用】
+对 dev.csv 进行基础描述性统计，生成星级分布和评论长度图表。
+
+【代码结构】
+- clean_text(text)：文本清洗函数，用正则去除特殊字符，只保留中文、
+  中英文标点、字母数字。
+- main()：主函数，流程为：
+  1) 读取 data/dev.csv
+  2) 统计各星级评分的数量分布
+  3) 分别统计清洗前后的评论文本长度
+  4) 生成星级分布柱状图 → visualization/star_distribution.png
+  5) 生成清洗后长度区间分布图 → visualization/cleaned_length_interval.png
+
+【关键代码说明】
+- 第10-15行：clean_text() 使用正则 [^\u4e00-\u9fa5，。！？；：、
+  a-zA-Z0-9\.,!?;:\s] 匹配需要保留的字符范围。
+- 第42-45行：用 value_counts() 统计星级分布。
+- 第54-55行：用 apply(clean_text) 对评论文本批量清洗。
+- 第73-77行：用 pd.cut() 将评论长度按每24字符分桶统计。
+
+================================================================================
+  2. review_segment.py — 评论拆分与方面标注
+================================================================================
+
+【作用】
+将长评论按标点拆分为句子片段，并标记每个片段涉及的方面。
+
+【代码结构】
+- ASPECT_DICT：6个方面的关键词词典（口味、环境、服务、价格、卫生、位置）
+- extract_aspects(text)：遍历词典，检查文本中是否存在对应关键词，提取命中的方面。
+- split_segments(text)：按句号、感叹号、问号、分号切分评论，为每个句子
+  关联命中的方面标签。
+- main()：读取 dev.csv，逐条处理评论，输出 data/segmented_reviews.csv。
+
+【关键代码说明】
+- 第20-29行：extract_aspects() 用集合去重，返回唯一的方面列表。
+- 第31-44行：split_segments() 用 re.split(r'[。！？；]', text) 切分句子，
+  对每个非空句子调用 extract_aspects() 标注方面。
+- 第72-79行：输出格式为每行对应一条原始评论，segments 字段用 ||| 
+  分隔各片段文本，segment_aspects 用 ||| 分隔对应方面标签。
+
+================================================================================
+  3. aspect_sentiment_stats.py — 情感标注统计
+================================================================================
+
+【作用】
+对 ASAP 数据集的18列情感标注按5大类统计分布，生成柱状图。
+
+【代码结构】
+- ASPECT_GROUPS：5个大类及其对应的 ASAP 标注列映射。
+  位置(3列)、服务(4列)、价格(3列)、环境(4列)、食物(4列)
+- count_aspect(df, col)：统计某列的情感分布，排除-2(未提及)值。
+- plot_group(group_name, items, df)：为一个大类生成分组柱状图。
+- main()：遍历5个大类，分别生成柱状图。
+
+【关键代码说明】
+- 第57-63行：count_aspect() 将非空值转为int，排除-2后计算
+  正面/中性/负面的计数和占比。
+- 第65-105行：plot_group() 使用多柱并列布局，同一大类内各子类
+  用不同颜色区分（从COLOR_POOL循环取色）。
+- 输出5张图片：dev_sentiment_位置/服务/价格/环境/食物.png
+
+================================================================================
+  4. aspect_word_stats.py — 分词词频统计
+================================================================================
+
+【作用】
+对评论文本进行分词和词频统计，生成5个类别的高频词分析CSV。
+
+【代码结构】
+- WORD_CATEGORIES：五大类词汇分类词典（200+词），支持一词多义。
+- load_official_stopwords()：加载5套官方停用词表（哈工大、百度等）。
+- is_useful_word(word, flag, stopwords)：过滤停用词、纯数字、
+  英文、单字、标点、无效词性。
+- categorize_word(word)：返回词所属的所有类别列表。
+- main()：读取dev.csv，分词统计，输出5个CSV文件。
+
+【关键代码说明】
+- 第38-56行：load_official_stopwords() 遍历5个停用词文件，
+  逐行读取合并到集合中去重。
+- 第58-81行：is_useful_word() 多层过滤：
+  1) 停用词过滤 → 2) 核心词典优先保留 → 3) 单字过滤 → 
+  4) 纯数字/英文过滤 → 5) 标点过滤 → 6) 词性过滤
+- 第131-149行：输出CSV格式为 词语、出现次数、占比(%)，
+  按词频降序排列。
+
+================================================================================
+  5. info_mining.py — 信息挖掘与可视化
+================================================================================
+
+【作用】
+从评论文本中挖掘客户类型、同行情况、关注方面，并生成图表。
+
+【代码结构】
+- NEW_KEYWORDS / OLD_KEYWORDS：新/老客户关键词列表。
+- COMPANION_DICT：6类同行的关键词词典。
+- ASPECT_COLUMNS：关注方面与ASAP标注列的映射。
+- extract_customer_type(text)：识别新/老/未知客户。
+- extract_companion(text)：识别同行类型，采用匹配数最多优先策略。
+- extract_aspects(row)：读取ASAP标注列判断关注方面。
+- main()：统计分析，生成3张图表。
+
+【关键代码说明】
+- 第37-46行：extract_customer_type() 先检查新客户关键词，
+  再检查老客户关键词，均未命中返回"未知"。
+- 第48-66行：extract_companion() 遍历COMPANION_DICT，
+  统计每个类型的关键词匹配数，取匹配数最多的类型，
+  用优先级列表解决并列情况。
+- 第126-167行：生成3张图表：
+  1) 客户类型饼图 → customer_type_pie.png
+  2) 同行情况柱状图 → companion_bar.png
+  3) 关注方面百分比柱状图 → aspect_bar.png
+
+================================================================================
+  6. model_star.py — Voting评分预测模型
+================================================================================
+
+【作用】
+构建、训练和评估 Voting 集成学习模型，用于口味/环境/服务评分预测，
+并对 dev.csv 进行位置/价格评分分析。
+
+【代码结构】
+- POS_WORDS / NEG_WORDS：情感词典（正面/负面词及其对应分数）
+- INTENSIFIERS / NEGATIONS：程度副词和否定词处理
+- compute_sentiment(text)：计算情感特征（12维向量）
+- _stat_feats(texts)：提取文本统计特征（长度、句子数等）
+- extract_features(texts) / transform_features(texts, vec, s1, s2)：
+  特征提取/转换（TF-IDF + 情感特征 + 统计特征 拼接）
+- 主流程：训练Voting模型 → test.csv分方面评估 → dev.csv分析
+
+【关键代码说明】
+- 第62-92行：compute_sentiment() 逐词处理，识别程度副词（x1.5-2.0）
+  和否定词（翻转正面/负面分数），返回12维特征：均值、中位数、标准差、
+  最小最大值、正面/负面词计数、比例、词汇多样性等。
+- 第105-112行：extract_features() 使用 TfidfVectorizer(5000维, 
+  1-2gram) + StandardScaler 对情感特征和统计特征标准化后拼接。
+- 第183-200行：VotingClassifier 集成4个基模型：
+  XGBoost(300树) + LightGBM(300树) + LogisticRegression + RandomForest(300树)
+  使用软投票策略。
+- 第207-214行：test.csv分方面评估，按口味/环境/服务分别计算
+  准确率、宏F1、exact match、1分以内误差。
+- 第242-324行：dev.csv分析生成3张图：
+  1) star列实际评分分布 → dev_star_location_price.png
+  2) Voting模型预测分布 → dev_voting_location_price.png
+  3) 实际vs模型对比 → dev_compare_location_price.png
+
+================================================================================
+  7. aspect_reply_model.py — 智能回复模型
+================================================================================
+
+【作用】
+结合评论分析和商家信息，调用智谱 GLM-4-Flash API 生成智能回复，
+无API时降级为本地规则模板。
+
+【代码结构】
+- strip_emoji(text)：过滤emoji，避免Windows GBK编码报错
+- _load_api_key()：按优先级读取API key
+  （环境变量 → api_key.txt → config.json）
+- CONFIG：API配置（base_url、model、temperature等）
+- MERCHANTS：3个内置示例商家
+- ASPECT_KEYWORDS / POS_WORDS / NEG_WORDS：评论分析词典
+- analyze_review(text, merchant_name)：分析评论（方面、情感、情境、关键词）
+- get_merchant_recommendation(merchant)：根据口碑给出回复策略
+- build_prompt(review_text, merchant, analysis, rec)：构造API请求
+- call_zhipu_api(prompt)：调用智谱API
+- local_template_reply(review_text, merchant, analysis, rec)：本地模板回复
+- generate_reply(review_text, merchant, use_api)：统一入口
+- demo()：演示示例
+
+【关键代码说明】
+- 第29-49行：_load_api_key() 优先从环境变量获取，
+  其次扫描 api_key.txt 和 config.json。
+- 第148-216行：analyze_review() 完整分析流程：
+  1) jieba分词 → 2) 方面识别 → 3) 情境识别 → 
+  4) 情感打分（处理程度副词和否定词）→ 5) 关键词提取
+- 第219-238行：get_merchant_recommendation() 按评分分4档：
+  优秀(≥4.5)、良好(≥4.0)、一般(≥3.5)、待提升(<3.5)，
+  每档有不同的回复策略和语气。
+- 第288-321行：call_zhipu_api() 发送POST请求到
+  /chat/completions，使用OpenAI兼容格式。
+- 第324-403行：local_template_reply() 基于规则拼接回复：
+  开头(感谢光临+情境问候) → 中段(招牌菜回应+方面回应) → 
+  结尾(口碑决定的推荐语)。
+- 第407-425行：generate_reply() 统一入口，
+  API成功时返回AI回复，失败或无key时降级本地模板。
+
+================================================================================
+  8. platform_gui.py — 图形化平台
+================================================================================
+
+【作用】
+一站式商家评论文本分析与智能回复平台的Tkinter图形界面。
+
+【代码结构】
+- load_merchants() / save_custom_merchant()：商家数据持久化
+- PlatformApp 类：
+  - __init__()：初始化窗口、数据、界面
+  - _build_toolbar()：构建顶部工具栏
+  - _build_notebook()：构建双选项卡
+  - _build_reply_tab()：评论与智能回复选项卡
+  - _build_viz_tab()：数据可视化选项卡
+  - 业务逻辑方法：数据加载、商家切换、滑槽导航、ID查询等
+  - 智能回复方法：异步生成、更新、选择、编辑、重新生成
+
+【关键代码说明】
+- 第57-73行：__init__() 初始化主窗口(1400x900)，
+  加载商家列表，构建工具栏和选项卡。
+- 第75-103行：_build_toolbar() 包含：
+  商家选择下拉框 + 添加商家按钮 + 重新加载按钮 + 
+  ID查询输入框 + 查询/清除按钮 + 状态标签 + API状态指示。
+- 第117-198行：_build_reply_tab() 左右分栏布局：
+  左侧：快速浏览滑槽 + Treeview评论列表(带纵横滚动)
+  右侧：评论ID/星级 + 评论内容 + 智能回复 + 三个操作按钮。
+- 第200-264行：_build_viz_tab() 可滚动2x2网格展示4张图片，
+  使用Canvas+Scrollbar实现滚动区域。
+- 第325-356行：滑槽双向同步机制：
+  拖动滑槽→Treeview滚动，Treeview滚动→滑槽位置更新。
+- 第502-510行：_async_generate_reply() 用后台线程调用API，
+  通过 root.after() 回到主线程更新UI，避免界面卡顿。
+- 第358-427行：_add_merchant_dialog() 弹出对话框添加商家，
+  保存到 merchants.json，下拉框实时更新。
+
+================================================================================
+  运行依赖
+================================================================================
+
+pip install pandas matplotlib numpy scikit-learn xgboost lightgbm jieba requests Pillow
+
+================================================================================
+  使用说明
+================================================================================
+
+1. 数据集位置：data/dev.csv, data/asap-master/data/train.csv, 
+   data/asap-master/data/test.csv
+
+2. 停用词库位置：data/stopwords/ (5个txt文件)
+
+3. API配置（三选一）：
+   a) 环境变量：set ZHIPU_API_KEY=xxxxxxxx
+   b) 本地文件：在项目根目录创建 api_key.txt，内容为API key
+   c) 配置文件：创建 config.json，内容 {"zhipu_api_key":"xxx"}
+
+4. 运行顺序（可选）：
+   python data_description.py      # 基础统计
+   python review_segment.py        # 评论拆分
+   python aspect_sentiment_stats.py # 情感标注统计
+   python aspect_word_stats.py     # 分词统计
+   python info_mining.py          # 信息挖掘
+   python model_star.py           # Voting模型
+   python aspect_reply_model.py   # 智能回复演示
+   python platform_gui.py         # GUI平台（需先配置API key）
+
+================================================================================
